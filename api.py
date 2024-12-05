@@ -25,7 +25,7 @@ logging.basicConfig(
 
 
 # Função para enviar mensagem para o Telegram
-def send_message_to_telegram(text):
+def send_message_to_telegram(text, meal_type):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": CHANNEL_ID, "text": text, "parse_mode": "HTML"}
     try:
@@ -33,15 +33,47 @@ def send_message_to_telegram(text):
         if response.ok:
             message_id = response.json().get("result", {}).get("message_id")
             if message_id:
+                # Save message ID with meal type
                 with open("message_ids.txt", "a") as file:
-                    file.write(f"{message_id}\n")
-                logging.info(f"Mensagem enviada com sucesso. ID: {message_id}")
+                    file.write(f"{message_id},{meal_type}\n")
+                    
+                # Delete previous message for this meal type if it exists
+                delete_previous_meal_message(meal_type, message_id)
+                    
+                logging.info(f"Mensagem de {meal_type} enviada com sucesso. ID: {message_id}")
             return message_id
         else:
             logging.error(f"Erro ao enviar mensagem. Resposta: {response.text}")
     except Exception as e:
         logging.exception("Erro inesperado ao enviar mensagem para o Telegram")
     return None
+
+def delete_previous_meal_message(meal_type, current_message_id):
+    try:
+        messages = []
+        # Read all messages
+        with open("message_ids.txt", "r") as file:
+            messages = [line.strip().split(",") for line in file if line.strip()]
+        
+        # Find previous message of the same meal type
+        for msg_id, msg_type in messages[:-1]:  # Exclude the last message (current one)
+            if msg_type == meal_type:
+                delete_message_from_telegram(int(msg_id))
+                logging.info(f"Mensagem anterior de {meal_type} (ID: {msg_id}) deletada.")
+        
+        # Clean up the message_ids.txt file to keep only the latest message for each type
+        latest_messages = {}
+        for msg_id, msg_type in messages:
+            latest_messages[msg_type] = msg_id
+            
+        with open("message_ids.txt", "w") as file:
+            for msg_type, msg_id in latest_messages.items():
+                file.write(f"{msg_id},{msg_type}\n")
+                
+    except FileNotFoundError:
+        logging.warning("Arquivo message_ids.txt não encontrado.")
+    except Exception as e:
+        logging.exception("Erro ao deletar mensagem anterior")
 
 # Função para apagar mensagens do Telegram
 def delete_message_from_telegram(message_id):
@@ -106,44 +138,54 @@ def get_menu_content():
 
 
 def format_menu(menu):
+    if not menu or not isinstance(menu, str):
+        return ""
     
-    formated_menu = menu.split("\n")
-    # print(formated_menu)
+    formated_menu = [line.strip() for line in menu.split("\n") if line.strip()]
     output_menu = ""
-    forbidden_words = ["sujeito", "Informamos", "Opção"]
+    
+    # Define menu sections with their emojis
+    menu_sections = {
+        "Salada": "🥗",
+        "Prato Principal": "🍛",
+        "Guarnição": "🍚",
+        "Sobremesa": "🍨"
+    }
+    
+    forbidden_words = ["sujeito", "Informamos", "Opção", "cardápio", "CARDÁPIO"]
+    current_section = None
+    
+    # Start with the fixed Acompanhamento section
+    output_menu += "🍟 <b>Acompanhamento</b>: \n"
+    for staple in ["Arroz Branco", "Arroz Integral", "Feijão"]:
+        output_menu += f"    - {staple}\n"
+    
     for item in formated_menu:
-
-        skip_next = False
-
-        for fb in forbidden_words:
-            if fb in item:
-                skip_next = True
-                break
-        if skip_next:
+        # Skip lines with forbidden words and Acompanhamento section
+        if any(word.lower() in item.lower() for word in forbidden_words) or "Acompanhamento" in item:
             continue
-
-        item = item.split("(")[0]
-
-        if item == "Salada":
-            output_menu += f"\n🥗 <b>{item}</b>: \n"
-            continue
-        elif item == "Prato Principal":
-            output_menu += f"\n🍛 <b>{item}</b>: \n"
-            continue
-        elif item == "Guarnição":
-            output_menu += f"\n🍚 <b>{item}</b>: \n"
-            continue
-        elif item == "Acompanhamento":
-            output_menu += f"\n🍟 <b>{item}</b>: \n"
-            continue
-        elif item == "Sobremesa":
-            output_menu += f"\n🍨 <b>{item}</b>: \n"
-            continue
-        else:
-            for item in item.split(", "):
-                for item in item.split(" e "):
-                    output_menu += f"    - {item}\n"
             
+        # Clean the item text
+        item = item.split("(")[0].strip()
+        
+        # Check if this is a section header
+        if item in menu_sections:
+            current_section = item
+            output_menu += f"\n{menu_sections[item]} <b>{item}</b>: \n"
+            continue
+            
+        # Process items only if we're in a valid section
+        if current_section and item:
+            # Split only by comma and clean
+            items = [sub_item.strip() for sub_item in item.split(",")]
+            
+            # Add unique items
+            seen_items = set()
+            for sub_item in items:
+                if sub_item and len(sub_item) > 1 and sub_item.lower() not in seen_items:
+                    output_menu += f"    - {sub_item}\n"
+                    seen_items.add(sub_item.lower())
+    
     return output_menu
 
 
@@ -170,25 +212,48 @@ def format_message(menu):
 def check_update():
     logging.info("Verificando atualizações do cardápio...")
     menu = get_menu_content()
-    if menu:
-        menu_text = "\n\n".join(menu.values())
+    
+    if not menu:
+        logging.error("Erro ao acessar o cardápio.")
+        return
+        
+    try:
+        # Get current time to determine meal type
+        current_time = datetime.datetime.now().time()
+        meal_type = "Jantar" if current_time.hour >= 14 else "Almoço"
+        
+        # Only process the relevant meal
+        menu_text = menu.get(meal_type, "")
+        if not menu_text:
+            logging.info(f"Cardápio para {meal_type} não encontrado.")
+            return
+            
         current_hash = hashlib.md5(menu_text.encode("utf-8")).hexdigest()
+        
+        # Store hashes separately for lunch and dinner
+        hash_file = f"menu_hash_{meal_type.lower()}.txt"
+        
         try:
-            with open("menu_hash.txt", "r") as file:
-                previous_hash = file.read()
+            with open(hash_file, "r") as file:
+                previous_hash = file.read().strip()
         except FileNotFoundError:
             previous_hash = None
+            
         if current_hash != previous_hash:
-            with open("menu_hash.txt", "w") as file:
+            # Update hash file
+            with open(hash_file, "w") as file:
                 file.write(current_hash)
-            message = format_message(menu)
+                
+            # Format and send message
+            message = format_message({meal_type: menu_text})
             if message:
-                logging.info("Cardápio atualizado. Enviando para o Telegram...")
-                send_message_to_telegram(message)
+                logging.info(f"Cardápio de {meal_type} atualizado. Enviando para o Telegram...")
+                send_message_to_telegram(message, meal_type)
         else:
-            logging.info("Nenhuma alteração no cardápio detectada.")
-    else:
-        logging.error("Erro ao acessar o cardápio.")
+            logging.info(f"Nenhuma alteração no cardápio de {meal_type} detectada.")
+            
+    except Exception as e:
+        logging.exception("Erro ao processar atualização do cardápio")
 
 logging.info("Monitoramento iniciado...")
 # Agendar a execução a cada 6 minutos para o envio do cardápio
