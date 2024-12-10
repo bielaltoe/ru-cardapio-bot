@@ -95,11 +95,13 @@ def delete_all_messages():
     logging.info("Iniciando exclusão de todas as mensagens...")
     try:
         with open("message_ids.txt", "r") as file:
-            message_ids = file.readlines()
-        for message_id in message_ids:
-            message_id = message_id.strip()
-            if message_id:
+            message_lines = file.readlines()
+        for line in message_lines:
+            line = line.strip()
+            if line:
+                message_id = line.split(",")[0]  # Get just the message ID part
                 delete_message_from_telegram(int(message_id))
+        # Clear the file after deleting all messages
         with open("message_ids.txt", "w") as file:
             file.write("")
         logging.info("Todas as mensagens foram apagadas com sucesso.")
@@ -155,31 +157,32 @@ def format_menu(menu):
     forbidden_words = ["sujeito", "Informamos", "Opção", "cardápio", "CARDÁPIO"]
     current_section = None
     
+    # Define fixed accompaniments
+    fixed_accompaniments = {"Arroz Branco", "Arroz Integral", "Feijão"}
+    
     # Start with the fixed Acompanhamento section
     output_menu += "🍟 <b>Acompanhamento</b>: \n"
-    for staple in ["Arroz Branco", "Arroz Integral", "Feijão"]:
+    for staple in fixed_accompaniments:
         output_menu += f"    - {staple}\n"
     
     for item in formated_menu:
-        # Skip lines with forbidden words and Acompanhamento section
-        if any(word.lower() in item.lower() for word in forbidden_words) or "Acompanhamento" in item:
+        # Skip lines with forbidden words, Acompanhamento section, and fixed accompaniments
+        if (any(word.lower() in item.lower() for word in forbidden_words) or 
+            "Acompanhamento" in item or 
+            any(acc.lower() in item.lower() for acc in fixed_accompaniments)):
             continue
             
-        # Clean the item text
+        # Rest of the function remains the same...
         item = item.split("(")[0].strip()
         
-        # Check if this is a section header
         if item in menu_sections:
             current_section = item
             output_menu += f"\n{menu_sections[item]} <b>{item}</b>: \n"
             continue
             
-        # Process items only if we're in a valid section
         if current_section and item:
-            # Split only by comma and clean
             items = [sub_item.strip() for sub_item in item.split(",")]
             
-            # Add unique items
             seen_items = set()
             for sub_item in items:
                 if sub_item and len(sub_item) > 1 and sub_item.lower() not in seen_items:
@@ -262,7 +265,7 @@ schedule.every(6).minutes.do(check_update)
 logging.info("Executando verificação inicial do cardápio...")
 check_update()  # Chamada inicial
 # Agendar a exclusão das mensagens à meia-noite
-schedule.every().day.at("23:59").do(delete_all_messages)
+schedule.every().day.at("15:19").do(delete_all_messages)
 
 while True:
     schedule.run_pending()
