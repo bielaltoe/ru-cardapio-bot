@@ -265,7 +265,7 @@ schedule.every(6).minutes.do(check_update)
 logging.info("Executando verificação inicial do cardápio...")
 check_update()  # Chamada inicial
 # Agendar a exclusão das mensagens à meia-noite
-schedule.every().day.at("15:19").do(delete_all_messages)
+schedule.every().day.at("23:59").do(delete_all_messages)
 
 while True:
     schedule.run_pending()
