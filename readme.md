@@ -30,12 +30,12 @@ RU Cardápio is a Python project designed to manage and display the menu of a un
 
 1. Clone the repository:
     ```bash
-    git clone https://github.com/bielaltoe/ru_cardapio-bot.git
+    git clone https://github.com/bielaltoe/ru-cardapio-bot.git
     ```
 
 2. Navigate to the project directory:
     ```bash
-    cd ru_cardapio-bot
+    cd ru-cardapio-bot
     ```
 
 3. Install the project dependencies:
