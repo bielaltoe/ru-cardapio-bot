@@ -59,13 +59,14 @@ RU Cardápio is a Python project designed to manage and display the menu of a un
 ---
 
 ## 🐳 Running with Docker
-
+Make shure to have the .env in the folder you are running the container!!.
 1. Run the container:
     ```bash
     docker run -d \
+      --name cardapio_ru_bot \ 
       --restart unless-stopped \
       --env-file .env \
-      gabrielaltoe/cardapio_ru_ufes:v1
+      gabrielaltoe/cardapio_ru_ufes:latest
     ```
 
 ---
