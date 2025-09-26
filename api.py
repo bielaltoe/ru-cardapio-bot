@@ -19,7 +19,7 @@ load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 # Alterna para DEV caso APP_ENV=dev
 APP_ENV = os.getenv("APP_ENV")
@@ -69,13 +69,20 @@ def delete_previous_meal_message(meal_type, current_message_id):
         with open("message_ids.txt", "r") as file:
             messages = [line.strip().split(",") for line in file if line.strip()]
         
-        # Find previous message of the same meal type
-        for msg_id, msg_type in messages[:-1]:  # Exclude the last message (current one)
+        # Encontra a mensagem anterior mais recente do mesmo tipo (antes da atual)
+        for msg_id, msg_type in reversed(messages[:-1]):  # Exclui a última (atual) e percorre do fim para o início
             if msg_type == meal_type:
-                delete_message_from_telegram(int(msg_id))
-                logging.info(f"Mensagem anterior de {meal_type} (ID: {msg_id}) deletada.")
+                try:
+                    ok = delete_message_from_telegram(int(msg_id))
+                    if ok:
+                        logging.info(f"Mensagem anterior de {meal_type} (ID: {msg_id}) deletada.")
+                    else:
+                        logging.warning(f"Falha ao deletar mensagem anterior de {meal_type} (ID: {msg_id}).")
+                except Exception:
+                    logging.exception(f"Erro ao deletar mensagem anterior de {meal_type} (ID: {msg_id})")
+                break  # Deleta apenas a última anterior
         
-        # Clean up the message_ids.txt file to keep only the latest message for each type
+        # Limpa o arquivo para manter apenas a última mensagem de cada tipo
         latest_messages = {}
         for msg_id, msg_type in messages:
             latest_messages[msg_type] = msg_id
@@ -130,11 +137,11 @@ def get_gemini_client():
     if not genai:
         logging.warning("Pacote google-genai não instalado. Usando fallback sem Gemini.")
         return None
-    if not GEMINI_API_KEY:
-        logging.warning("GEMINI_API_KEY não definido. Usando fallback sem Gemini.")
+    if not GOOGLE_API_KEY:
+        logging.warning("GOOGLE_API_KEY não definido. Usando fallback sem Gemini.")
         return None
     try:
-        # O client lê a chave do ambiente GEMINI_API_KEY
+        # O client lê a chave do ambiente GOOGLE_API_KEY
         client = genai.Client()
         return client
     except Exception:
@@ -222,11 +229,14 @@ def get_menu_content():
                 body_div = body.find("div", class_="field-content")
                 field_html = str(body_div) if body_div else ""
 
+                # Texto bruto (estável) para hash
+                meal_content_text = body_div.get_text(separator="\n", strip=True) if body_div else ""
+
                 # Tenta usar Gemini para parse estruturado
                 parsed = parse_menu_with_gemini(meal_title, field_html)
-
-                # Fallback para texto simples caso Gemini falhe
-                meal_content_text = body_div.get_text(separator="\n", strip=True) if body_div else ""
+                if parsed is not None:
+                    # Anexa fonte para hashing estável
+                    parsed["source"] = meal_content_text
 
                 if "Almoço" in meal_title:
                     menu["Almoço"] = parsed if parsed else meal_content_text
@@ -387,24 +397,21 @@ def check_update():
         return
         
     try:
-        # Get current time to determine meal type
         current_time = datetime.datetime.now().time()
         meal_type = "Jantar" if current_time.hour >= 14 else "Almoço"
         
-        # Only process the relevant meal
         menu_obj = menu.get(meal_type)
         if not menu_obj:
             logging.info(f"Cardápio para {meal_type} não encontrado.")
             return
             
-        # Calcula hash a partir do conteúdo estruturado (JSON) ou texto
+        # Hash estável baseado no texto bruto (source) quando disponível
         if isinstance(menu_obj, dict):
-            hash_source = json.dumps(menu_obj, ensure_ascii=False, sort_keys=True)
+            hash_source = menu_obj.get("source") or json.dumps(menu_obj.get("sections", {}), ensure_ascii=False, sort_keys=True)
         else:
             hash_source = str(menu_obj)
         current_hash = hashlib.md5(hash_source.encode("utf-8")).hexdigest()
         
-        # Store hashes separately for lunch and dinner
         hash_file = f"menu_hash_{meal_type.lower()}.txt"
         
         try:
@@ -414,11 +421,9 @@ def check_update():
             previous_hash = None
             
         if current_hash != previous_hash:
-            # Update hash file
             with open(hash_file, "w") as file:
                 file.write(current_hash)
                 
-            # Format and send message
             message = format_message({meal_type: menu_obj})
             if message:
                 logging.info(f"Cardápio de {meal_type} atualizado. Enviando para o Telegram...")

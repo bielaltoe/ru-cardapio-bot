@@ -38,7 +38,7 @@ Opcionais (DEV):
 - CHANNEL_DEV_ID: id do canal de DEV (numérico)
 
 Gemini:
-- GEMINI_API_KEY: chave da API Gemini
+- GOOGLE_API_KEY: chave da API Gemini
 
 Exemplos:
 
@@ -47,14 +47,14 @@ Exemplos:
 APP_ENV=dev
 TELEGRAM_DEV_TOKEN=SEU_TOKEN_DEV
 CHANNEL_DEV_ID=-100XXXXXXXXXX
-GEMINI_API_KEY=SUA_CHAVE_GEMINI
+GOOGLE_API_KEY=SUA_CHAVE_GEMINI
 ```
 
 .env.prod
 ```env
 TELEGRAM_TOKEN=SEU_TOKEN_PROD
 CHANNEL_ID=-100YYYYYYYYYY
-GEMINI_API_KEY=SUA_CHAVE_GEMINI
+GOOGLE_API_KEY=SUA_CHAVE_GEMINI
 ```
 
 Como obter o chat_id do canal:
@@ -141,7 +141,7 @@ Requisitos para excluir:
 
 - 400/403 ao enviar: verifique se o bot é Admin e o chat_id está correto.
 - deleteMessage falha: use id numérico e confirme permissão de exclusão.
-- Gemini indisponível: confirme GEMINI_API_KEY e rede; o fallback segue ativo.
+- Gemini indisponível: confirme GOOGLE_API_KEY e rede; o fallback segue ativo.
 
 ---
 
