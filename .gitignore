@@ -5,6 +5,7 @@
 /message_ids_telegram.json
 /message_ids_whatsapp.json
 /daily_control.json
+/data/
 .env.*
 # Byte-compiled / optimized / DLL files
 __pycache__/

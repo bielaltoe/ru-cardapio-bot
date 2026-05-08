@@ -1,0 +1,12 @@
+services:
+  cardapio_ru_bot:
+    image: gabrielaltoe/cardapio_ru_ufes:latest
+    container_name: cardapio_ru_bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      TZ: America/Sao_Paulo
+    volumes:
+      - ./data:/data
+    pull_policy: always

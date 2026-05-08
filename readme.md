@@ -83,7 +83,7 @@ TEST_DEV_SEND=1 python main.py
 
 ---
 
-## Docker
+## Docker (manual)
 
 ```bash
 docker build -t gabrielaltoe/cardapio_ru_ufes:latest .
@@ -91,8 +91,48 @@ docker run -d \
   --name cardapio_ru_bot \
   --restart unless-stopped \
   --env-file .env \
+  -e DATA_DIR=/data \
+  -v $(pwd)/data:/data \
   gabrielaltoe/cardapio_ru_ufes:latest
 ```
+
+---
+
+## Deploy automático (CI → VPS)
+
+O `.github/workflows/deploy.yml` builda a imagem e dispara deploy na VPS a cada push em `main`:
+
+1. Builda `gabrielaltoe/cardapio_ru_ufes:latest` e `:<sha-curto>`.
+2. Pusha pro Docker Hub.
+3. SSH na VPS, roda `docker compose pull && docker compose up -d` no diretório do deploy.
+
+### Secrets do GitHub (repo → Settings → Secrets and variables → Actions)
+
+| Secret | Descrição |
+| --- | --- |
+| `DOCKERHUB_USERNAME` | Usuário do Docker Hub |
+| `DOCKERHUB_TOKEN` | Access token (Docker Hub → Account Settings → Security) |
+| `SSH_HOST` | IP/hostname da VPS |
+| `SSH_USER` | Usuário SSH (ex: `ubuntu`) |
+| `SSH_KEY` | Conteúdo da chave **privada** SSH (ex: `~/.ssh/id_ed25519`) |
+| `SSH_PORT` | Porta SSH (opcional, default 22) |
+| `DEPLOY_PATH` | Caminho onde fica o `docker-compose.yml` na VPS, ex: `/srv/cardapio-ru` |
+
+### Setup inicial na VPS
+
+```bash
+mkdir -p /srv/cardapio-ru/data
+cd /srv/cardapio-ru
+# coloca o .env com TELEGRAM_TOKEN, CHANNEL_ID, GOOGLE_API_KEY, WHATSAPP_*
+# copia o docker-compose.yml deste repo pra cá
+docker compose up -d
+```
+
+A partir daí, todo merge em `main` atualiza o container automaticamente.
+
+### Disparo manual
+
+Actions → "Build and deploy" → **Run workflow**.
 
 ---
 

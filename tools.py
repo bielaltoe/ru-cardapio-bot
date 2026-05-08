@@ -54,10 +54,6 @@ KEY_MAP = {
 
 
 class Tools:
-    DAILY_CONTROL_FILE = "daily_control.json"
-    TELEGRAM_HISTORY_FILE = "message_ids_telegram.json"
-    WHATSAPP_HISTORY_FILE = "message_ids_whatsapp.json"
-
     def __init__(self):
         cfg = Config()
         self.TELEGRAM_TOKEN = cfg.TELEGRAM_TOKEN
@@ -67,6 +63,12 @@ class Tools:
         self.WHATSAPP_API_KEY = cfg.WHATSAPP_API_KEY
         self.WHATSAPP_INSTANCE = cfg.WHATSAPP_INSTANCE
         self.WHATSAPP_GROUP_ID = cfg.WHATSAPP_GROUP_ID
+
+        data_dir = os.getenv("DATA_DIR", ".")
+        os.makedirs(data_dir, exist_ok=True)
+        self.DAILY_CONTROL_FILE = os.path.join(data_dir, "daily_control.json")
+        self.TELEGRAM_HISTORY_FILE = os.path.join(data_dir, "message_ids_telegram.json")
+        self.WHATSAPP_HISTORY_FILE = os.path.join(data_dir, "message_ids_whatsapp.json")
 
     # --- Daily control ---
 
