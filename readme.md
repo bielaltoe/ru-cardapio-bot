@@ -1,104 +1,92 @@
 # Cardápio RU Bot
 
-Automatiza a coleta do cardápio do RU (site oficial), formata e publica no Telegram.
-Utiliza Google Gemini para extrair dados estruturados do HTML, com fallback para parsing tradicional.
+Coleta o cardápio do RU/UFES, formata e publica no **Telegram** e/ou **WhatsApp**.
+Usa Google Gemini para extrair os itens do HTML, com fallback de parsing textual.
 
 ---
 
 ## Recursos
 
-- Extração com IA (Gemini) + fallback seguro.
-- Envio formatado (HTML) para canal do Telegram.
-- Agendamento periódico (a cada 6 minutos).
-- Limpeza diária de mensagens (23:59).
+- Extração com IA (Gemini) + fallback.
+- Envio formatado para canal do Telegram (HTML) e/ou grupo do WhatsApp (Markdown WA).
+- Apaga **todas** as mensagens anteriores do mesmo tipo de refeição ao enviar uma nova.
+- Limpeza diária à 23:59.
+- HTML do Telegram com escape correto (sem mais quebra por `&`, `<`, `>`).
 - Suporte a ambientes DEV/PROD e teste rápido de envio.
-
----
-
-## Tecnologias
-
-- Python 3.10+
-- requests, beautifulsoup4, schedule, logging, python-dotenv
-- google-genai (cliente oficial Gemini)
-- Docker (opcional)
 
 ---
 
 ## Configuração
 
-Crie um arquivo `.env` (ou use `.env.dev` e `.env.prod`):
+Variáveis de ambiente (`.env`):
 
-Obrigatórios (PROD):
-- TELEGRAM_TOKEN: token do bot de produção
-- CHANNEL_ID: id do canal principal (prefira numérico, ex.: -100XXXXXXXXXX)
+### Comum
+- `APP_ENV` (opcional): `dev` para usar tokens/canais de DEV.
+- `GOOGLE_API_KEY`: chave da API Gemini (opcional; sem ela usa só fallback).
 
-Opcionais (DEV):
-- APP_ENV=dev
-- TELEGRAM_DEV_TOKEN: token do bot de DEV
-- CHANNEL_DEV_ID: id do canal de DEV (numérico)
+### Telegram (opcional — só envia se configurado)
+- `TELEGRAM_TOKEN` / `TELEGRAM_DEV_TOKEN`
+- `CHANNEL_ID` / `CHANNEL_DEV_ID` (prefira id numérico `-100...`)
 
-Gemini:
-- GOOGLE_API_KEY: chave da API Gemini
+### WhatsApp (opcional — só envia se configurado)
+Compatível com **Evolution API** (open source, baseado em Baileys) ou qualquer gateway com endpoints
+`POST /message/sendText/{instance}` e `DELETE /chat/deleteMessageForEveryone/{instance}`.
 
-Exemplos:
+- `WHATSAPP_API_URL`: ex. `https://evo.meudominio.com`
+- `WHATSAPP_API_KEY`: API key configurada na Evolution
+- `WHATSAPP_INSTANCE`: nome da instância
+- `WHATSAPP_GROUP_ID` / `WHATSAPP_DEV_GROUP_ID`: id do grupo no formato `123456789@g.us`
 
-.env.dev
+Pra descobrir o id do grupo, na Evolution: `GET /chat/findGroups/{instance}` e use o `id` retornado.
+
+Pelo menos um canal (Telegram ou WhatsApp) precisa estar configurado.
+
+### Exemplos
+
+`.env.prod`
+```env
+TELEGRAM_TOKEN=xxxxx
+CHANNEL_ID=-1001234567890
+GOOGLE_API_KEY=xxxxx
+
+WHATSAPP_API_URL=https://evo.meudominio.com
+WHATSAPP_API_KEY=xxxxx
+WHATSAPP_INSTANCE=cardapio-ru
+WHATSAPP_GROUP_ID=120363000000000000@g.us
+```
+
+`.env.dev`
 ```env
 APP_ENV=dev
-TELEGRAM_DEV_TOKEN=SEU_TOKEN_DEV
-CHANNEL_DEV_ID=-100XXXXXXXXXX
-GOOGLE_API_KEY=SUA_CHAVE_GEMINI
+TELEGRAM_DEV_TOKEN=xxxxx
+CHANNEL_DEV_ID=-1009876543210
+GOOGLE_API_KEY=xxxxx
+WHATSAPP_API_URL=https://evo.meudominio.com
+WHATSAPP_API_KEY=xxxxx
+WHATSAPP_INSTANCE=cardapio-dev
+WHATSAPP_DEV_GROUP_ID=120363111111111111@g.us
 ```
-
-.env.prod
-```env
-TELEGRAM_TOKEN=SEU_TOKEN_PROD
-CHANNEL_ID=-100YYYYYYYYYY
-GOOGLE_API_KEY=SUA_CHAVE_GEMINI
-```
-
-Como obter o chat_id do canal:
-- Adicione o bot como Administrador do canal.
-- Envie uma mensagem no canal.
-- Se tiver @username: GET https://api.telegram.org/bot<TOKEN>/getChat?chat_id=@seu_username
-- Se for privado: GET https://api.telegram.org/bot<TOKEN>/getUpdates e procure `.channel_post.chat.id` (formato -100XXXXXXXXXX)
 
 ---
 
-## Instalação e execução local
+## Execução local
 
-1) Instale dependências
 ```bash
 pip install -r requirements.txt
+python main.py
 ```
 
-2) Configure `.env` (ou `.env.dev` / `.env.prod`)
-
-3) Teste rápido no canal atual
+Teste rápido (envia uma mensagem dummy nos canais configurados e sai):
 ```bash
-TEST_DEV_SEND=1 python api.py
+TEST_DEV_SEND=1 python main.py
 ```
-
-4) Execução normal (agendador + limpeza diária)
-```bash
-python api.py
-```
-
-Observações:
-- Com APP_ENV=dev, o código usa TELEGRAM_DEV_TOKEN e CHANNEL_DEV_ID.
-- Prefira IDs numéricos para compatibilidade com deleteMessage.
 
 ---
 
 ## Docker
 
-Build da imagem:
 ```bash
 docker build -t gabrielaltoe/cardapio_ru_ufes:latest .
-```
-
-Rodar com .env local:
-```bash
 docker run -d \
   --name cardapio_ru_bot \
   --restart unless-stopped \
@@ -106,51 +94,32 @@ docker run -d \
   gabrielaltoe/cardapio_ru_ufes:latest
 ```
 
-Teste rápido (DEV):
-```bash
-docker run --rm --env-file .env -e TEST_DEV_SEND=1 gabrielaltoe/cardapio_ru_ufes:latest
-```
-
-Dica: mantenha `.env` fora da imagem (adicione `.env` e `.env.*` no `.dockerignore`/`.gitignore`).
-
 ---
 
 ## Como funciona
 
-1) Coleta o HTML do dia no site do RU.
-2) Tenta extrair seções com Gemini (Salada, Prato Principal, etc.).
-3) Se falhar, aplica parsing textual como fallback.
-4) Formata a mensagem (com data) e envia ao Telegram.
-5) Deduplica por refeição via hash (Almoço/Jantar) e só envia se houver alteração.
-6) Exclui mensagens diariamente às 23:59.
+1. A cada 6 minutos verifica o cardápio do dia.
+2. Tenta parsear com Gemini → estrutura JSON; senão, fallback textual.
+3. Renderiza pra cada canal (Telegram em HTML escapado, WhatsApp em `*bold*`).
+4. Envia, registra o id e apaga **todas** as mensagens anteriores do mesmo tipo (Almoço/Jantar) — não só uma.
+5. Se um canal falhar, o outro ainda envia.
+6. À 23:59 todas as mensagens registradas são apagadas.
 
-Requisitos para excluir:
-- Bot deve ser Admin do canal.
-- Use chat_id numérico.
-
----
-
-## Segurança
-
-- Não versione `.env` ou segredos; rotacione tokens/chaves se expuser.
-- Adicione ao .gitignore: `.env`, `.env.*`, `app.log`, `message_ids.txt`.
+Requisitos pra apagar:
+- Telegram: bot precisa ser admin do canal, chat_id numérico.
+- WhatsApp: gateway precisa suportar `deleteMessageForEveryone` e a mensagem precisa ter sido enviada pela própria instância.
 
 ---
 
 ## Troubleshooting
 
-- 400/403 ao enviar: verifique se o bot é Admin e o chat_id está correto.
-- deleteMessage falha: use id numérico e confirme permissão de exclusão.
-- Gemini indisponível: confirme GOOGLE_API_KEY e rede; o fallback segue ativo.
+- **Telegram 400 / "can't parse entities"**: era causado por `&`, `<` ou `>` no cardápio — agora todos os campos dinâmicos são escapados.
+- **Mensagem antiga não some**: confira que o bot é admin (Telegram) / que a instância tem permissão (WhatsApp). Telegram só permite deletar mensagens com até 48h.
+- **WhatsApp 401/403**: verifique `WHATSAPP_API_KEY` e se a instância está conectada.
+- **Gemini falha**: confirme `GOOGLE_API_KEY`; o fallback textual continua ativo.
 
 ---
 
 ## Licença
 
 MIT.
-
----
-
-## Contato
-
-Canal: @cardapio_ufes

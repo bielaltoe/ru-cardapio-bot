@@ -1,6 +1,11 @@
 /menu_hash_jantar.txt
 /menu_hash_almoco.txt
 /message_ids.txt
+/message_ids.json
+/message_ids_telegram.json
+/message_ids_whatsapp.json
+/daily_control.json
+.env.*
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
